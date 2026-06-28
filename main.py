@@ -190,8 +190,9 @@ def plan_outline(state: OrchestratorState):
     outline = [line.strip() for line in resp.content.split('\n') if line.strip()]
     return {"outline": outline}
 
-def write_section(state: OrchestratorState, section_title: str):
-    # 工作者：根据标题写内容
+def write_section(state: OrchestratorState):
+    # 工作者：根据标题写内容（section_title 由 Send 合并进 state）
+    section_title = state["section_title"]
     content = model.invoke([SystemMessage(content="写一个关于'"+section_title+"'的段落，约50字。")]).content
     return {"sections": [f"## {section_title}\n{content}"]}
 
@@ -256,6 +257,9 @@ def build_evaluator():
     builder.add_conditional_edges("evaluate", should_continue_or_retry, ["generate", END])
     return builder.compile()
 
-routing_app = build_routing()
-result = routing_app.invoke({"user_input": "讲个关于猫的笑话"})
-print(result["output"])
+orchestrator_app = build_orchestrator()
+# result = orchestrator_app.invoke({"topic": "人工智能在医疗领域的应用"})
+
+# 查看生成的完整报告
+for chunk in orchestrator_app.stream({"topic": "人工智能在医疗领域的应用"}):
+    print(chunk)
