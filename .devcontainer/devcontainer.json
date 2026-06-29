@@ -1,0 +1,46 @@
+{
+  "name": "NETCONF/YANG Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "USERNAME": "developer",
+      "USER_UID": "2000",
+      "USER_GID": "2000"
+    }
+  },
+  "workspaceFolder": "/workspaces/7_t",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/7_t,type=bind",
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/developer/.ssh,type=bind,readonly"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "ms-vscode.makefile-tools",
+        "xaver.clang-format",
+        "github.vscode-github-actions",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "C_Cpp.default.cppStandard": "c11",
+        "C_Cpp.default.cStandard": "c11",
+        "C_Cpp.formatting": "clangFormat",
+        "C_Cpp.clang_format_path": "/usr/bin/clang-format",
+        "cmake.configureOnOpen": false,
+        "cmake.sourceDirectory": "${workspaceFolder}/mf",
+        "files.watcherExclude": {
+          "**/build/**": true,
+          "**/.git/objects/**": true
+        }
+      }
+    }
+  },
+  "remoteUser": "developer",
+  "postCreateCommand": "echo 'Dev container ready. Build with: cd mf && mkdir -p build && cd build && cmake .. && make -j$(nproc)'",
+  "features": {}
+}

@@ -1,0 +1,35 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "description": "Debug build with all projects",
+      "binaryDir": "${sourceDir}/build/cmake-debug",
+      "installDir": "${sourceDir}/build/install-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install-debug",
+        "BUILD_SHARED_LIBS": "ON",
+        "ENABLE_TESTS": "OFF",
+        "ENABLE_VALGRIND_TESTS": "OFF",
+        "ENABLE_COVERAGE": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Release build with all projects",
+      "binaryDir": "${sourceDir}/build/cmake-release",
+      "installDir": "${sourceDir}/build/install-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install-release",
+        "BUILD_SHARED_LIBS": "ON",
+        "ENABLE_TESTS": "OFF",
+        "ENABLE_VALGRIND_TESTS": "OFF",
+        "ENABLE_COVERAGE": "OFF"
+      }
+    }
+  ]
+}

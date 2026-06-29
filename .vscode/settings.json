@@ -1,0 +1,53 @@
+{
+  "editor.formatOnSave": true,
+  "editor.rulers": [120],
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // C/C++ configuration
+  "C_Cpp.default.cStandard": "c11",
+  "C_Cpp.default.cppStandard": "c11",
+  "C_Cpp.formatting": "clangFormat",
+  "C_Cpp.clang_format_path": "/usr/bin/clang-format",
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.errorSquiggles": "enabled",
+
+  // Include paths for IntelliSense (relative to workspace root)
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/mf/build/install/include/**",
+    "${workspaceFolder}/mf/libyang/src/**",
+    "${workspaceFolder}/mf/sysrepo/src/**",
+    "${workspaceFolder}/mf/libnetconf2/src/**",
+    "${workspaceFolder}/mf/netopeer2/src/**",
+    "${workspaceFolder}/mf/libmf/**",
+    "${workspaceFolder}/mf/libcli/**"
+  ],
+
+  // Files to exclude from file watcher
+  "files.watcherExclude": {
+    "**/mf/build/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true
+  },
+
+  // Files to exclude from search
+  "search.exclude": {
+    "**/mf/build": true,
+    "**/.git": true
+  },
+
+  // CMake configuration
+  "cmake.configureOnOpen": false,
+  "cmake.sourceDirectory": "${workspaceFolder}/mf",
+  "cmake.buildDirectory": "${workspaceFolder}/mf/build/cmake",
+
+  // Makefile tools
+  "makefile.configureOnOpen": false,
+
+  // Clang-format
+  "clang-format.executable": "/usr/bin/clang-format",
+  "[c]": {
+    "editor.defaultFormatter": "xaver.clang-format"
+  }
+}

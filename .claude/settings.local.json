@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export http_proxy=http://127.0.0.1:7890)",
+      "Bash(export https_proxy=http://127.0.0.1:7890)",
+      "Bash(git push *)"
+    ]
+  }
+}

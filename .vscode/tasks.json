@@ -1,0 +1,114 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build: All (Release)",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["release"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Build: All (Debug)",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["debug"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Build: libyang",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["libyang"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Build: sysrepo",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["sysrepo"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Build: libnetconf2",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["libnetconf2"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Build: netopeer2",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["netopeer2"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Build: libmf",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["libmf"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Build: libcli",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["libcli"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Clean",
+      "type": "shell",
+      "command": "${workspaceFolder}/mf/build.sh",
+      "args": ["clean"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}
