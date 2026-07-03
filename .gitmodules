@@ -1,18 +1,29 @@
 [submodule "mf/libcli"]
 	path = mf/libcli
 	url = git@codeup.aliyun.com:69a6db102baf901da4b6bff2/exteral-lib/libcli.git
+	branch = v1.0.0
+
 [submodule "mf/netopeer2"]
 	path = mf/netopeer2
 	url = git@codeup.aliyun.com:69a6db102baf901da4b6bff2/exteral-lib/netopeer2.git
+	branch = v1.0.0
+
 [submodule "mf/sysrepo"]
 	path = mf/sysrepo
 	url = git@codeup.aliyun.com:69a6db102baf901da4b6bff2/exteral-lib/sysrepo.git
+	branch = v1.0.0
+
 [submodule "mf/libyang"]
 	path = mf/libyang
 	url = git@codeup.aliyun.com:69a6db102baf901da4b6bff2/exteral-lib/libyang.git
+	branch = v1.0.0
+
 [submodule "mf/libnetconf2"]
 	path = mf/libnetconf2
 	url = git@codeup.aliyun.com:69a6db102baf901da4b6bff2/exteral-lib/libnetconf2.git
+	branch = v1.0.0
+
 [submodule "mf/libmf"]
 	path = mf/libmf
 	url = git@codeup.aliyun.com:69a6db102baf901da4b6bff2/exteral-lib/libmf.git
+	branch = v1.0.0
