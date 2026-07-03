@@ -32,3 +32,8 @@ sudo chown -R developer:developer /mnt/flash
 chmod -R 777 /mnt/flash
 
 ./build.sh
+
+
+```
+git clone --recursive git@github.com:lvhuanid/7_t.git
+```
