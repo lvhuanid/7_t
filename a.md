@@ -37,3 +37,21 @@ chmod -R 777 /mnt/flash
 ```
 git clone --recursive git@github.com:lvhuanid/7_t.git
 ```
+
+
+
+场景 B：项目已经 Clone 到了本地，现在想拉取最新的子模块
+如果你本地已经有这个项目，但子模块目录目前是空的，或者你想把它们更新到 .gitmodules 中指定的 v1.0.0 分支，请依次执行以下命令：
+# 1. 先把主仓库的代码拉取到最新
+```
+git pull origin main  # (注: 如果主分支叫 master 请改为 master)
+```
+# 2. 同步你在 .gitmodules 中修改的分支配置
+```
+git submodule sync
+```
+
+# 3. 递归初始化并根据配置的 branch (v1.0.0) 抓取远程代码
+```
+git submodule update --init --recursive --remote
+```
