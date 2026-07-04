@@ -1,4 +1,6 @@
-FROM ubuntu:24.04
+# FROM ubuntu:24.04
+FROM registry.cn-hangzhou.aliyuncs.com/zenithtel/env AS base
+
 
 # Prevent interactive prompts during package install
 ENV DEBIAN_FRONTEND=noninteractive
