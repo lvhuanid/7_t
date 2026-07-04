@@ -38,6 +38,10 @@ chmod -R 777 /mnt/flash
 git clone --recursive https://github.com/lvhuanid/7_t.git
 ```
 
+```
+git submodule foreach --recursive 'git fetch --tags && git checkout v1.0.0'
+```
+
 
 
 场景 B：项目已经 Clone 到了本地，现在想拉取最新的子模块
