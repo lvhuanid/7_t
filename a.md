@@ -35,7 +35,7 @@ chmod -R 777 /mnt/flash
 
 
 ```
-git clone --recursive git@github.com:lvhuanid/7_t.git
+git clone --recursive https://github.com/lvhuanid/7_t.git
 ```
 
 
