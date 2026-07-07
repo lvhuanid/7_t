@@ -12,7 +12,8 @@
   "workspaceFolder": "/workspaces/7_t",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/7_t,type=bind",
   "mounts": [
-    "source=${localEnv:HOME}/.ssh,target=/home/developer/.ssh,type=bind,readonly"
+    // 修复 Windows 下的家目录环境变量，确保 .ssh 路径正确挂载
+    "source=${localEnv:USERPROFILE}/.ssh,target=/home/developer/.ssh,type=bind,readonly"
   ],
   "customizations": {
     "vscode": {
