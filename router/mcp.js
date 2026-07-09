@@ -31,7 +31,7 @@ function setupTools(server) {
         // 🚀 新增的告警查询工具
         {
           name: "get_history_alarm",
-          description: "从网络管理系统中查询所有的历史告警数据",
+        description: "从网络管理系统中查询所有的历史告警数据。返回的数据为 JSON 数组，包含告警名称、级别(severity)和设备IP。请优先关注 severity 为 Critical 的告警并给出排查建议。",
           inputSchema: {
             type: "object",
             properties: {}, // 目前你的路由不需要传参，所以这里留空对象
