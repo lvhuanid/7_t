@@ -1,104 +1,67 @@
 import express from "express";
 import cors from "cors";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { createRequire } from "module";
+
+// ==================== 1. 兼容老项目的 CommonJS 路由 ====================
+// 使用官方标准的 createRequire，这样你原有的老路由文件（require 写的）一个字都不用改！
+const require = createRequire(import.meta.url);
+
+// const event = require("./router/event.js");
+// const _trap = require("./router/trap.js");
+// const mtr = require("./router/mtr.js");
+// const ping = require("./router/ping.js");
+
+// ==================== 2. 引入原生 ESM 的 MCP 路由 ====================
+import mcpRouter from "./router/mcp.js";
 
 const app = express();
 const PORT = 3000;
+const version = "v1.0.0_INTEGRATED";
+const healthSlaveCache = { value: "Healthy" };
 
+// ==================== 3. 核心中间件与路由挂载 ====================
+
+// 允许跨域
 app.use(cors());
 
-// 创建一个统一的工具注册函数，方便为每个新 Server 配置工具
-function setupTools(server) {
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: [
-        {
-          name: "calculate_sum",
-          description: "计算两个数字的和",
-          inputSchema: {
-            type: "object",
-            properties: {
-              a: { type: "number", description: "第一个数字" },
-              b: { type: "number", description: "第二个数字" },
-            },
-            required: ["a", "b"],
-          },
-        },
-      ],
-    };
-  });
+// ⚡ 极其重要：优先挂载 MCP 路由！
+// 这样可以确保 SSE 的长连接流（Stream）不被下方老项目的任何全局解析、打包、权限中间件污染或掐断
+app.use("/api/mcp", mcpRouter);
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (request.params.name === "calculate_sum") {
-      const { a, b } = request.params.arguments;
-      return {
-        content: [{ type: "text", text: `计算结果：${a} + ${b} = ${a + b}` }],
-      };
+// 挂载解析 POST JSON 数据的中间件（供老项目接口和 MCP 的 /messages 路由公用）
+app.use(express.json());
+
+// 模拟你原有的 session 注入中间件
+app.use((req, res, next) => {
+    req.session = { username: "admin", userType: "superuser" };
+    next();
+});
+
+// ==================== 4. 挂载你原本的已有路由 ====================
+// app.use("/api/event", event);
+// app.use("/api/trap", _trap);
+// app.use("/api/mtr", mtr);
+// app.use("/api/ping", ping);
+
+app.post("/api/current_user", (req, res) => {
+    const { username, userType } = req.session;
+    res.json({ username, version, userType, healthSlave: healthSlaveCache.value });
+});
+
+app.post("/api/getMonitorResult", async (req, res) => {
+    const { pid, fiterData } = req.body;
+    let searchStr = "*";
+    if (fiterData) {
+        searchStr = fiterData;
     }
-    throw new Error(`未知的工具: ${request.params.name}`);
-  });
-}
-
-// 存储所有的活跃连接，包含 transport 和它专属的 server
-const activeSessions = new Map();
-
-// GET 路由：每个客户端连接进来时，分配独立的 Server 和 Transport
-app.get("/mcp/sse", async (req, res) => {
-  res.setHeader("X-Accel-Buffering", "no");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-
-  // 1. 创建属于当前连接的独立 Transport
-  const transport = new SSEServerTransport("/mcp/messages", res);
-  const sessionId = transport.sessionId;
-
-  console.log(`[🚀 新连接] 客户端请求建立实例，分配会话 ID: ${sessionId}`);
-
-  // 2. 为当前连接创建独立的 MCP Server 实例
-  const mcpServer = new Server(
-    { name: `my-mcp-server-${sessionId}`, version: "1.0.0" },
-    { capabilities: { tools: {} } }
-  );
-
-  // 3. 挂载工具
-  setupTools(mcpServer);
-
-  // 4. 将该会话的 transport 存入 Map
-  activeSessions.set(sessionId, transport);
-
-  // 监听断开事件，安全清理
-  res.on("close", () => {
-    console.log(`[❌ 断开连接] 客户端会话已释放: ${sessionId}`);
-    activeSessions.delete(sessionId);
-  });
-
-  // 5. 启动当前实例的连接
-  await mcpServer.connect(transport);
+    res.json({ success: true, pid, searchStr, data: [] });
 });
 
-// POST 路由：根据请求的 sessionId 准确路由到对应的 transport
-app.post("/mcp/messages", async (req, res) => {
-  const sessionId = req.query.sessionId;
-  const transport = activeSessions.get(sessionId);
-
-  if (!transport) {
-    console.warn(`[⚠️ 警告] 收到未知或已过期的会话 POST 请求: ${sessionId}`);
-    return res.status(400).send(`未找到对应的 SSE 会话: ${sessionId}`);
-  }
-
-  try {
-    // 准确交给属于该客户端的 transport 实例处理
-    await transport.handlePostMessage(req, res);
-  } catch (error) {
-    console.error(`❌ [会话 ${sessionId}] 处理消息错误:`, error);
-    if (!res.headersSent) res.status(500).send("Internal Error");
-  }
-});
-
+// ==================== 5. 启动服务器 ====================
 app.listen(PORT, () => {
-  console.log(`✅ MCP 多并发 SSE 服务器已成功启动，端口 ${PORT}`);
+    console.log(`=================================================`);
+    console.log(`✅ 融合版后端服务器已成功启动，端口: ${PORT}`);
+    console.log(`🔗 现有老接口示例: http://localhost:${PORT}/api/ping`);
+    console.log(`📡 独立 MCP 连接口: http://localhost:${PORT}/api/mcp/sse`);
+    console.log(`=================================================`);
 });
