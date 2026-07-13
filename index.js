@@ -4,7 +4,12 @@ import mcpRouter from "./mcp.router.js"; // 引入刚才抽离的路由
 
 const app = express();
 const PORT = 3000;
+const version = "v1.0.0_INTEGRATED";
+const healthSlaveCache = { value: "Healthy" };
 
+// ==================== 3. 核心中间件与路由挂载 ====================
+
+// 允许跨域
 app.use(cors());
 // app.use(express.json()); // 如果需要解析 json 请求体可以加上
 
