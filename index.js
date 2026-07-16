@@ -10,6 +10,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import dayjs from "dayjs"; // ES Module 引入方式
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +39,100 @@ const sessionState = {
   isLoggedIn: false,
   rawCookies: "", // 用于存放登录成功后的 Cookie 字符串
 };
+
+/**
+ * 🛡️ 自动登录守卫与鉴权 Headers 组装器
+ * @returns {Promise<Object>} 组装好的鉴权 headers 对象
+ * @throws {Error} 自动登录失败时抛出错误
+ */
+async function ensureAuthHeaders() {
+  // 1. 如果当前未登录，自动发起静默登录
+  if (!sessionState.isLoggedIn) {
+    const defaultUser = process.env.PROJECT_USER || "1";
+    const defaultPass = process.env.PROJECT_PASS || "!Aa123123";
+
+    console.error("[*] 检测到未登录，正在触发守卫自动登录...");
+    const loginRes = await performLoginAction(defaultUser, defaultPass, true);
+
+    if (!loginRes.success) {
+      throw new Error(`自动登录失败：${loginRes.message}`);
+    }
+  }
+
+  // 2. 组装鉴权 Headers（带上 principal 并且显式注入 Cookie）
+  const headers = {
+    principal: sessionState.principal || "",
+  };
+
+  if (sessionState.rawCookies) {
+    headers["Cookie"] = sessionState.rawCookies; // 保持 Express Session 的核心
+  }
+
+  return headers;
+}
+
+/**
+ * 🕒 复刻原有规则：转换告警创建时间
+ * @param {string|number} timeCreated - 后端返回的原始 time-created
+ * @param {Object} stats - 可选，物理状态对象，包含修改时间 mtime
+ * @returns {string} 格式化后的时间，或原始 mtime
+ */
+function getFormattedAlarmTime(timeCreated, stats = {}) {
+  // 模拟你之前的判定逻辑：
+  // 如果 timeCreated 存在且有效，使用 dayjs 格式化它（此处如果是纳秒，传入时除以 1,000,000 转换为毫秒）
+  if (timeCreated && timeCreated !== "0") {
+    const tsStr = timeCreated.toString();
+    const ms =
+      tsStr.length > 13
+        ? parseInt(tsStr.substring(0, 13), 10)
+        : parseInt(tsStr, 10);
+    return dayjs(ms).format("YYYY-MM-DD HH:mm:ss");
+  }
+
+  // 否则退回到 stats.mtime
+  const mtime = stats.mtime || new Date(); // 容错处理：若无 mtime，退回当前系统时间
+  return dayjs(mtime).format("YYYY-MM-DD HH:mm:ss");
+}
+
+/**
+ * 🖥️ 添加网元设备的核心业务逻辑
+ * @param {Object} neParams - 网元参数对象
+ */
+async function addNeAction(neParams) {
+  try {
+    // 🛡️ 1. 自动登录守卫，获取最新的鉴权 Headers 和 Cookie
+    const headers = await ensureAuthHeaders();
+
+    console.log(
+      `[*] 准备发送添加网元请求，Headers: ${JSON.stringify(headers)}，参数: ${JSON.stringify(neParams)}`,
+    );
+
+    // 🛡️ 2. 发送业务 POST 请求 (第二个参数是 payload 负载，第三个是配置项 headers)
+    const response = await httpClient.post("/api/nelist/add", neParams, {
+      headers,
+    });
+
+    return response.data;
+  } catch (error) {
+    // 🛡️ 3. 容错与 401 重置登录态处理
+    if (error.message && error.message.includes("自动登录失败")) {
+      return {
+        success: false,
+        message: `操作中止：${error.message}，请尝试手动调用 login_to_project 工具。`,
+      };
+    }
+
+    if (error.response && error.response.status === 401) {
+      console.error("[!] 收到 401 鉴权失败，已重置登录状态。");
+      sessionState.isLoggedIn = false;
+    }
+
+    return {
+      success: false,
+      message: `添加网元失败: ${error.message}`,
+    };
+  }
+}
 
 // ---------------- 核心登录逻辑 ----------------
 async function performLoginAction(username, password, force) {
@@ -92,41 +187,27 @@ async function performLoginAction(username, password, force) {
 
 // ---------------- 新增工具：获取所有告警 (带登录守卫) ----------------
 async function getAllAlarmAction() {
-  // 🛡️ 1. 自动登录守卫：如果当前未登录，自动发起登录
-  if (!sessionState.isLoggedIn) {
-    const defaultUser = process.env.PROJECT_USER || "1";
-    const defaultPass = process.env.PROJECT_PASS || "!Aa123123";
-
-    console.error("[*] 检测到未登录，正在触发守卫自动登录...");
-    const loginRes = await performLoginAction(defaultUser, defaultPass, true);
-
-    if (!loginRes.success) {
-      return {
-        success: false,
-        message: `操作中止：自动登录失败，请手动调用 login_to_project 工具。错误原因：${loginRes.message}`,
-      };
-    }
-  }
-
-  // 🛡️ 2. 组装鉴权 Headers（带上 principal 并且显式注入 Cookie）
-  const headers = {
-    principal: sessionState.principal || "",
-  };
-  if (sessionState.rawCookies) {
-    headers["Cookie"] = sessionState.rawCookies; // 保持 Express Session 的核心
-  }
-  console.log(
-    `[*] 准备发送 get_all_alarm 请求，Headers: ${JSON.stringify(headers)}`,
-  );
-
   try {
-    // 🛡️ 3. 发送业务请求
+    const headers = await ensureAuthHeaders();
     const response = await httpClient.post("/api/monitoring/get_all_alarm", {
       headers,
     });
-    return response.data;
+    const rawData = response.data;
+
+    // 🛡️ 3. 数据清洗与时间转换
+    if (Array.isArray(rawData)) {
+      return rawData.map((alarm) => {
+        // 创建一个新对象，避免直接修改原始数据
+        return {
+          ...alarm,
+          // 转换原本的 time-created 字段
+          "time-created": getFormattedAlarmTime(alarm["time-created"]),
+        };
+      });
+    }
+
+    return rawData;
   } catch (error) {
-    // 🛡️ 4. 容错处理：如果报 401 鉴权失败，重置登录状态，方便下一次调用自动重连
     if (error.response && error.response.status === 401) {
       console.error("[!] 收到 401 鉴权失败，已重置登录状态。");
       sessionState.isLoggedIn = false;
@@ -149,7 +230,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "login_to_project",
+        name: "login",
         description:
           "手动登录到项目管理系统。通常情况下无需手动调用（启动时已自动登录）。如果运行过程中登录失效，可调用此工具。",
         inputSchema: {
@@ -166,6 +247,49 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
         description: "获取所有告警",
         inputSchema: { type: "object", properties: {} },
       },
+      {
+        name: "add_network_element",
+        description: "向项目系统添加新的网元（NE）设备。会自动处理鉴权。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              description: "设备类型，例如 '5'",
+              default: "5",
+            },
+            name: {
+              type: "string",
+              description: "设备名称标识，例如 '222'",
+            },
+            host: {
+              type: "string",
+              description: "设备的 IP 地址，例如 '192.168.1.222'",
+            },
+            port: {
+              type: "string",
+              description: "设备通信端口，例如 '161'",
+              default: "161",
+            },
+            username: {
+              type: "string",
+              description: "登录该设备的用户名，例如 'admin'",
+              default: "admin",
+            },
+            password: {
+              type: "string",
+              description: "登录该设备的密码，例如 'OPtical@1'",
+              default: "OPtical@1",
+            },
+            group: {
+              type: "string",
+              description: "所属分组，例如 'root'",
+              default: "root",
+            },
+          },
+          required: ["name", "host"], // 限制名称和 IP 地址为必填项
+        },
+      },
     ],
   };
 });
@@ -174,7 +298,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
 mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  if (name === "login_to_project") {
+  if (name === "login") {
     const username = args.username || "1";
     const password = args.password || "!Aa123123";
     const force = args.force !== undefined ? args.force : true;
@@ -190,6 +314,26 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
     const alarmResult = await getAllAlarmAction();
     return {
       content: [{ type: "text", text: JSON.stringify(alarmResult, null, 2) }],
+    };
+  }
+
+  if (name === "add_network_element") {
+    // 组装前台 AI 传入的参数（带上默认值容错）
+    const neParams = {
+      type: args.type || "5",
+      name: args.name,
+      host: args.host,
+      port: args.port || "161",
+      username: args.username || "admin",
+      password: args.password || "OPtical@1",
+      group: args.group || "root",
+    };
+
+    // 执行添加网元
+    const result = await addNeAction(neParams);
+
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
   }
 

@@ -7,6 +7,7 @@
     "axios": "^1.18.1",
     "axios-cookiejar-support": "^7.0.0",
     "cors": "^2.8.5",
+    "dayjs": "^1.11.21",
     "express": "^4.19.2",
     "tough-cookie": "^6.0.2"
   },
