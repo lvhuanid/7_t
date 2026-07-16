@@ -10,7 +10,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import dayjs from "dayjs"; // ES Module 引入方式
+import dayjs from "dayjs";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +39,171 @@ const sessionState = {
   isLoggedIn: false,
   rawCookies: "", // 用于存放登录成功后的 Cookie 字符串
 };
+
+// ---------------- 🤖 模型驱动：工具元数据配置 ----------------
+const API_METADATA = [
+  {
+    name: "get_all_alarm",
+    description: "获取系统所有的实时活动告警列表。",
+    path: "/api/monitoring/get_all_alarm",
+    method: "POST",
+    properties: {}, // 无入参
+    required: [],
+    // 提供一个可选的数据清洗/转换钩子
+    transformResponse: (data) => {
+      if (Array.isArray(data)) {
+        return data.map((alarm) => ({
+          ...alarm,
+          "time-created": formatDate(alarm["time-created"]),
+        }));
+      }
+      return data;
+    },
+  },
+  {
+    name: "add_network_element",
+    description: "向项目系统添加新的网元（NE）设备。",
+    path: "/api/nelist/add",
+    method: "POST",
+    properties: {
+      type: {
+        type: "string",
+        description:
+          "设备类型。目前可选：'5' (表示特定网元512), '251' (表示特定网元251)", // 在描述里写清楚每个值代表什么
+        enum: ["5", "251"], // 🌟 限制可选的枚举值
+        default: "5",
+      },
+      name: { type: "string", description: "设备名称标识" },
+      host: { type: "string", description: "设备的 IP 地址" },
+      port: { type: "string", description: "设备通信端口", default: "161" },
+      username: {
+        type: "string",
+        description: "登录该设备的用户名",
+        default: "admin",
+      },
+      password: {
+        type: "string",
+        description: "登录该设备的密码",
+        default: "OPtical@1",
+      },
+      group: { type: "string", description: "所属分组", default: "root" },
+    },
+    required: ["name", "host"],
+  },
+  {
+    name: "delete_network_element",
+    description: "向项目系统删除的网元（NE）设备。",
+    path: "/api/nelist/del",
+    method: "POST",
+    properties: {
+      ne_id: {
+        type: "string",
+        description: "设备ip地址和端口号例如(192.168.1.123:161)",
+      },
+    },
+    required: ["ne_id"],
+  },
+  {
+    name: "get_connection_by_group",
+    description:
+      "查询系统内所有分组的网元连接状态与拓扑信息。无需任何参数，会自动处理鉴权。",
+    path: "/api/data/connectionbygroup",
+    method: "POST",
+    properties: {},
+    required: [],
+    transformResponse: (data) => {
+      // 安全检查，确保返回了 neInfo 数组
+      if (data && Array.isArray(data.neInfo)) {
+        const cleanedNeInfo = data.neInfo.map((item) => {
+          const val = item.value || {};
+
+          // 1. 提取并打平我们关心的核心属性
+          return {
+            id: item.id,
+            name: val.name || "",
+            host: val.host || "",
+            port: val.port || "",
+            group: val.group || "root",
+            type: val.type || "",
+            state: val.state, // 状态
+            runState: val.runState, // 运行状态
+
+            // 2. 将超长的纳秒级时间戳转化为本地可读时间
+            updatedTime: val.time ? formatDate(val.time) : "",
+
+            // 3. 过滤掉无用的敏感信息与冗余数组
+            // ❌ 丢弃：val.password (避免泄露安全凭证并节省 token)
+            // ❌ 丢弃：val.upgrade, val.data, val.lng, val.lat (除非你非常需要地图定位)
+          };
+        });
+
+        // 返回清洗后结构清爽的数据
+        return {
+          groupInfo: data.groupInfo || [],
+          neInfo: cleanedNeInfo,
+        };
+      }
+      return data;
+    },
+  },
+];
+
+/**
+ * 🚀 统一的 API 驱动执行器
+ */
+async function executeConfiguredApi(toolName, args) {
+  // 1. 查找对应的配置项
+  const config = API_METADATA.find((item) => item.name === toolName);
+  if (!config) {
+    throw new Error(`未找到配置的工具: ${toolName}`);
+  }
+
+  try {
+    // 🛡️ 2. 调用通用的登录鉴权守卫
+    const headers = await ensureAuthHeaders();
+
+    // 3. 合并参数的默认值
+    const payload = {};
+    for (const [key, propSpec] of Object.entries(config.properties || {})) {
+      payload[key] = args[key] !== undefined ? args[key] : propSpec.default;
+    }
+
+    // console.log(
+    //   `[*] [驱动器] 执行 ${toolName} -> ${config.path}，参数: ${JSON.stringify(payload)}`,
+    // );
+
+    // 4. 根据 method 发起请求 (这里以 POST 为例，如果需要支持 GET，可以用 config.method 判断)
+    let response;
+    if (config.method === "POST") {
+      response = await httpClient.post(config.path, payload, { headers });
+    } else {
+      response = await httpClient.get(config.path, {
+        params: payload,
+        headers,
+      });
+    }
+
+    // 5. 执行可能存在的数据清洗钩子
+    if (typeof config.transformResponse === "function") {
+      return config.transformResponse(response.data);
+    }
+
+    return response.data;
+  } catch (error) {
+    // 6. 统一的 401 拦截
+    if (error.response && error.response.status === 401) {
+      console.error(
+        `[!] [驱动器] ${toolName} 收到 401 鉴权失败，已重置登录状态。`,
+      );
+      sessionState.isLoggedIn = false;
+    }
+
+    return {
+      success: false,
+      message: `调用 ${toolName} 失败: ${error.message}`,
+    };
+  }
+}
 
 /**
  * 🛡️ 自动登录守卫与鉴权 Headers 组装器
@@ -77,7 +242,7 @@ async function ensureAuthHeaders() {
  * @param {Object} stats - 可选，物理状态对象，包含修改时间 mtime
  * @returns {string} 格式化后的时间，或原始 mtime
  */
-function getFormattedAlarmTime(timeCreated, stats = {}) {
+function formatDate(timeCreated, stats = {}) {
   // 模拟你之前的判定逻辑：
   // 如果 timeCreated 存在且有效，使用 dayjs 格式化它（此处如果是纳秒，传入时除以 1,000,000 转换为毫秒）
   if (timeCreated && timeCreated !== "0") {
@@ -225,72 +390,37 @@ const mcpServer = new Server(
   { capabilities: { tools: {} } },
 );
 
-// 1. 注册工具列表
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
+  // 1. 基础的手动工具（如登录工具）保持不变
+  const staticTools = [
+    {
+      name: "login",
+      description:
+        "手动登录到项目管理系统。通常情况下无需手动调用（启动时已自动登录）。如果运行过程中登录失效，可调用此工具。",
+      inputSchema: {
+        type: "object",
+        properties: {
+          username: { type: "string", default: "1" },
+          password: { type: "string", default: "!Aa123123" },
+          force: { type: "boolean", default: true },
+        },
+      },
+    },
+  ];
+
+  // 2. 将配置自动转换为 MCP 工具声明
+  const dynamicTools = API_METADATA.map((config) => ({
+    name: config.name,
+    description: config.description,
+    inputSchema: {
+      type: "object",
+      properties: config.properties,
+      required: config.required,
+    },
+  }));
+
   return {
-    tools: [
-      {
-        name: "login",
-        description:
-          "手动登录到项目管理系统。通常情况下无需手动调用（启动时已自动登录）。如果运行过程中登录失效，可调用此工具。",
-        inputSchema: {
-          type: "object",
-          properties: {
-            username: { type: "string", default: "1" },
-            password: { type: "string", default: "!Aa123123" },
-            force: { type: "boolean", default: true },
-          },
-        },
-      },
-      {
-        name: "get_all_alarm",
-        description: "获取所有告警",
-        inputSchema: { type: "object", properties: {} },
-      },
-      {
-        name: "add_network_element",
-        description: "向项目系统添加新的网元（NE）设备。会自动处理鉴权。",
-        inputSchema: {
-          type: "object",
-          properties: {
-            type: {
-              type: "string",
-              description: "设备类型，例如 '5'",
-              default: "5",
-            },
-            name: {
-              type: "string",
-              description: "设备名称标识，例如 '222'",
-            },
-            host: {
-              type: "string",
-              description: "设备的 IP 地址，例如 '192.168.1.222'",
-            },
-            port: {
-              type: "string",
-              description: "设备通信端口，例如 '161'",
-              default: "161",
-            },
-            username: {
-              type: "string",
-              description: "登录该设备的用户名，例如 'admin'",
-              default: "admin",
-            },
-            password: {
-              type: "string",
-              description: "登录该设备的密码，例如 'OPtical@1'",
-              default: "OPtical@1",
-            },
-            group: {
-              type: "string",
-              description: "所属分组，例如 'root'",
-              default: "root",
-            },
-          },
-          required: ["name", "host"], // 限制名称和 IP 地址为必填项
-        },
-      },
-    ],
+    tools: [...staticTools, ...dynamicTools],
   };
 });
 
@@ -298,40 +428,22 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
 mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
+  // 1. 保留原本必须手动处理的纯本地工具（如 login）
   if (name === "login") {
-    const username = args.username || "1";
-    const password = args.password || "!Aa123123";
-    const force = args.force !== undefined ? args.force : true;
-
-    const loginResult = await performLoginAction(username, password, force);
+    const result = await performLoginAction(
+      args.username,
+      args.password,
+      args.force,
+    );
     return {
-      content: [{ type: "text", text: JSON.stringify(loginResult, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
   }
 
-  if (name === "get_all_alarm") {
-    // 调用封装好的自动守卫逻辑
-    const alarmResult = await getAllAlarmAction();
-    return {
-      content: [{ type: "text", text: JSON.stringify(alarmResult, null, 2) }],
-    };
-  }
-
-  if (name === "add_network_element") {
-    // 组装前台 AI 传入的参数（带上默认值容错）
-    const neParams = {
-      type: args.type || "5",
-      name: args.name,
-      host: args.host,
-      port: args.port || "161",
-      username: args.username || "admin",
-      password: args.password || "OPtical@1",
-      group: args.group || "root",
-    };
-
-    // 执行添加网元
-    const result = await addNeAction(neParams);
-
+  // 2. 所有的模型驱动工具，全部由统一引擎处理
+  const isConfigured = API_METADATA.some((item) => item.name === name);
+  if (isConfigured) {
+    const result = await executeConfiguredApi(name, args);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };
@@ -339,7 +451,6 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   throw new Error(`未找到工具: ${name}`);
 });
-
 // ---------------- 启动生命周期 ----------------
 async function start() {
   const isStdioMode = process.argv.includes("--stdio");
