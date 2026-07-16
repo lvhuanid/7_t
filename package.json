@@ -4,8 +4,11 @@
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "axios": "^1.18.1",
+    "axios-cookiejar-support": "^7.0.0",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "tough-cookie": "^6.0.2"
   },
   "scripts": {
     "start": "node index.js"
