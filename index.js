@@ -36,6 +36,7 @@ const sessionState = {
   token: null,
   principal: null,
   isLoggedIn: false,
+  rawCookies: "", // 用于存放登录成功后的 Cookie 字符串
 };
 
 // ---------------- 核心登录逻辑 ----------------
@@ -52,6 +53,14 @@ async function performLoginAction(username, password, force) {
       sessionState.token = data.token;
       sessionState.principal = data.principal;
       sessionState.isLoggedIn = true;
+
+      // 💾 显式提取并保存 Cookie 头（兼容 Express 的多 Cookie 格式）
+      const setCookieHeader = response.headers["set-cookie"];
+      if (setCookieHeader) {
+        sessionState.rawCookies =
+          "BrowserSurvival=true;" +
+          setCookieHeader.map((cookie) => cookie.split(";")[0]).join("; ");
+      }
 
       return {
         success: true,
@@ -81,6 +90,54 @@ async function performLoginAction(username, password, force) {
   }
 }
 
+// ---------------- 新增工具：获取所有告警 (带登录守卫) ----------------
+async function getAllAlarmAction() {
+  // 🛡️ 1. 自动登录守卫：如果当前未登录，自动发起登录
+  if (!sessionState.isLoggedIn) {
+    const defaultUser = process.env.PROJECT_USER || "1";
+    const defaultPass = process.env.PROJECT_PASS || "!Aa123123";
+
+    console.error("[*] 检测到未登录，正在触发守卫自动登录...");
+    const loginRes = await performLoginAction(defaultUser, defaultPass, true);
+
+    if (!loginRes.success) {
+      return {
+        success: false,
+        message: `操作中止：自动登录失败，请手动调用 login_to_project 工具。错误原因：${loginRes.message}`,
+      };
+    }
+  }
+
+  // 🛡️ 2. 组装鉴权 Headers（带上 principal 并且显式注入 Cookie）
+  const headers = {
+    principal: sessionState.principal || "",
+  };
+  if (sessionState.rawCookies) {
+    headers["Cookie"] = sessionState.rawCookies; // 保持 Express Session 的核心
+  }
+  console.log(
+    `[*] 准备发送 get_all_alarm 请求，Headers: ${JSON.stringify(headers)}`,
+  );
+
+  try {
+    // 🛡️ 3. 发送业务请求
+    const response = await httpClient.post("/api/monitoring/get_all_alarm", {
+      headers,
+    });
+    return response.data;
+  } catch (error) {
+    // 🛡️ 4. 容错处理：如果报 401 鉴权失败，重置登录状态，方便下一次调用自动重连
+    if (error.response && error.response.status === 401) {
+      console.error("[!] 收到 401 鉴权失败，已重置登录状态。");
+      sessionState.isLoggedIn = false;
+    }
+    return {
+      success: false,
+      message: `请求 get_all_alarm 失败: ${error.message}`,
+    };
+  }
+}
+
 // ---------------- MCP 服务端初始化 ----------------
 const mcpServer = new Server(
   { name: "TnmsManager", version: "1.0.0" },
@@ -91,18 +148,6 @@ const mcpServer = new Server(
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
-      {
-        name: "calculate_sum",
-        description: "计算两个数字的和",
-        inputSchema: {
-          type: "object",
-          properties: {
-            a: { type: "number" },
-            b: { type: "number" },
-          },
-          required: ["a", "b"],
-        },
-      },
       {
         name: "login_to_project",
         description:
@@ -116,6 +161,11 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: "get_all_alarm",
+        description: "获取所有告警",
+        inputSchema: { type: "object", properties: {} },
+      },
     ],
   };
 });
@@ -123,13 +173,6 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
 // 2. 处理工具调用
 mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-
-  if (name === "calculate_sum") {
-    const { a, b } = args;
-    return {
-      content: [{ type: "text", text: `计算结果：${a} + ${b} = ${a + b}` }],
-    };
-  }
 
   if (name === "login_to_project") {
     const username = args.username || "1";
@@ -139,6 +182,14 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
     const loginResult = await performLoginAction(username, password, force);
     return {
       content: [{ type: "text", text: JSON.stringify(loginResult, null, 2) }],
+    };
+  }
+
+  if (name === "get_all_alarm") {
+    // 调用封装好的自动守卫逻辑
+    const alarmResult = await getAllAlarmAction();
+    return {
+      content: [{ type: "text", text: JSON.stringify(alarmResult, null, 2) }],
     };
   }
 
