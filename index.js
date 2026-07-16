@@ -104,6 +104,55 @@ const API_METADATA = [
     required: ["ne_id"],
   },
   {
+    name: "query_system_entity",
+    description:
+      "通用数据实体查询工具。可用于获取网元列表、分组配置等实体数据，支持过滤条件。默认获取网元配置 (config:ne)。",
+    path: "/api/data/get",
+    method: "POST",
+    properties: {
+      entity: {
+        type: "string",
+        description:
+          "要查询的数据实体类型，例如 'config:ne' (网元配置), 'config:group' (分组配置)",
+        default: "config:ne",
+      },
+      filter: {
+        type: "object",
+        description: "过滤条件，键值对格式。例如 {'group': 'root'}",
+        default: {},
+      },
+    },
+    required: [],
+    transformResponse: (data) => {
+      if (data && Array.isArray(data.documents)) {
+        const cleanedDocs = data.documents.map((item) => {
+          const val = item.value || {};
+
+          return {
+            id: item.id,
+            name: val.name || "",
+            host: val.host || "",
+            port: val.port || "",
+            group: val.group || "root",
+            type: val.type || "",
+            state: val.state,
+            runState: val.runState,
+            // 🕒 自动转换纳秒级时间戳为本地时间
+            updatedTime: val.time ? formatDate(val.time) : "",
+            // ❌ 安全脱敏：移除敏感和无用的多余数据
+            // 过滤掉 val.password, val.upgrade, val.data
+          };
+        });
+
+        return {
+          total: data.total || cleanedDocs.length,
+          documents: cleanedDocs,
+        };
+      }
+      return data;
+    },
+  },
+  {
     name: "get_connection_by_group",
     description:
       "查询系统内所有分组的网元连接状态与拓扑信息。无需任何参数，会自动处理鉴权。",
@@ -175,7 +224,11 @@ async function executeConfiguredApi(toolName, args) {
     // 4. 根据 method 发起请求 (这里以 POST 为例，如果需要支持 GET，可以用 config.method 判断)
     let response;
     if (config.method === "POST") {
-      response = await httpClient.post(config.path, payload, { headers });
+      let requestUrl = config.path;
+      if (config.path === "/api/data/get" && payload.entity) {
+        requestUrl = `${config.path}?${payload.entity}`; // 拼装成: /api/data/get?config:ne
+      }
+      response = await httpClient.post(requestUrl, payload, { headers });
     } else {
       response = await httpClient.get(config.path, {
         params: payload,
